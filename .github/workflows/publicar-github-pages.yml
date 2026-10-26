@@ -1,0 +1,56 @@
+name: Publicar Escola O Verbo no GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Baixar arquivos do repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar site para o endereco do GitHub Pages
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          dist = Path('dist')
+          assert (dist / 'index.html').is_file(), 'dist/index.html ausente'
+          pattern = re.compile(r'''(?P<attr>\b(?:href|src|poster|data-photo|data-video))=(?P<quote>["'])/(?!/)''')
+          for html in dist.glob('*.html'):
+              old = html.read_text(encoding='utf-8')
+              new = pattern.sub(r'\g<attr>=\g<quote>./', old)
+              new = new.replace('href="./#', 'href="./index.html#').replace('href="./"', 'href="./index.html"')
+              html.write_text(new, encoding='utf-8')
+              print(html.name, 'caminhos relativos corrigidos')
+          (dist / '.nojekyll').touch()
+          PY
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Enviar site estatico
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Publicar site
+        id: deploy
+        uses: actions/deploy-pages@v4
